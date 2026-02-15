@@ -1,0 +1,12 @@
+node_modules
+dist
+out
+*.log*
+*.DS_Store
+
+/outputs/
+/.idea
+/coverage/
+
+/resources/FinalDream-core
+/resources/models/z-image*
