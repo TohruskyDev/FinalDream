@@ -11,6 +11,7 @@ import {
 } from '@vicons/ionicons5'
 import {
   NButton,
+  NCard,
   NDrawer,
   NIcon,
   NImage,
@@ -19,6 +20,7 @@ import {
   NInputNumber,
   NLog,
   NModal,
+  NProgress,
   NSelect,
   useMessage,
 } from 'naive-ui'
@@ -42,14 +44,19 @@ const {
   negativePrompt,
   selectedModel,
   availableModels,
+  remoteModels,
   width,
   height,
   steps,
   seed,
   gpuId,
   outputFolder,
+  // Model logic
+  modelStatus,
+  isDownloadingModel,
+  downloadProgress,
 } = storeToRefs(zImageStore)
-const { fetchModels, startGeneration, stopGeneration, selectOutputFolder } = zImageStore
+const { fetchModels, startGeneration, stopGeneration, selectOutputFolder, checkModel, checkAllModels, downloadModel } = zImageStore
 
 const message = useMessage()
 const { ipcRenderer } = window.electron
@@ -63,8 +70,14 @@ const containerWidth = ref(1200) // Default start width
 let resizeObserver: ResizeObserver | null = null
 
 // Lifecycle
-onMounted(() => {
-  fetchModels()
+onMounted(async () => {
+  await fetchModels()
+  checkAllModels() // Check all zoo models status
+
+  // If we have a selected model, check it specifically (in case it's local custom)
+  if (selectedModel.value && !availableModels.value.includes(selectedModel.value)) {
+    checkModel(selectedModel.value)
+  }
 
   // Setup ResizeObserver
   if (galleryRef.value) {
@@ -107,7 +120,6 @@ watch(logs, async () => {
 })
 
 // Actions
-// Actions
 function handleGenerate(): void {
   if (!prompt.value)
     return
@@ -117,7 +129,11 @@ function handleGenerate(): void {
     return
   }
 
-  const result = startGeneration()
+  const result = startGeneration({
+    onError: (_code) => {
+      message.error(t('common.generationFailed'))
+    },
+  })
   if (!result.success && result.message) {
     message.error(result.message)
   }
@@ -329,10 +345,17 @@ const gridStyle = computed(() => {
     <NModal v-model:show="showSettings">
       <div class="settings-card glass-modal">
         <div class="settings-grid">
-          <!-- Language -->
+          <!-- Output -->
           <div class="setting-item full-width">
-            <label>{{ t('settings.language') }}</label>
-            <NSelect v-model:value="locale" :options="languageOptions" class="glass-select" />
+            <label>{{ t('settings.outputFolder') }}</label>
+            <div class="folder-input">
+              <NInput v-model:value="outputFolder" readonly class="glass-input-sm" />
+              <NButton class="glass-button-sm" @click="selectOutputFolder">
+                <template #icon>
+                  <NIcon><FolderOpenOutline /></NIcon>
+                </template>
+              </NButton>
+            </div>
           </div>
 
           <!-- Negative Prompt -->
@@ -347,10 +370,45 @@ const gridStyle = computed(() => {
             />
           </div>
 
-          <!-- Model -->
+          <!-- Model Selection (Local) -->
           <div class="setting-item full-width">
             <label>{{ t('settings.model') }}</label>
             <NSelect v-model:value="selectedModel" :options="modelOptions" class="glass-select" />
+          </div>
+
+          <!-- Model Zoo (Downloadable) -->
+          <div class="setting-item full-width">
+            <label>{{ t('common.modelZoo') }}</label>
+            <div class="model-zoo-list">
+              <div v-for="model in remoteModels" :key="model.id" class="zoo-item">
+                <div class="zoo-info">
+                  <div class="zoo-name">
+                    {{ model.name }}
+                  </div>
+                  <div class="zoo-desc">
+                    {{ model.description }}
+                  </div>
+                </div>
+                <div class="zoo-actions">
+                  <NButton
+                    size="small"
+                    :type="availableModels.includes(model.id) ? 'success' : 'primary'"
+                    secondary
+                    :loading="!!isDownloadingModel[model.id] && !!modelStatus[model.id] && modelStatus[model.id]?.missingFiles.length > 0"
+                    @click="() => {
+                      if (!availableModels.includes(model.id)) {
+                        // Trigger check/download logic
+                        checkModel(model.id).then(valid => {
+                          if (!valid) downloadModel(model.id)
+                        })
+                      }
+                    }"
+                  >
+                    {{ availableModels.includes(model.id) ? t('common.installed') : t('common.download') }}
+                  </NButton>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Dimensions -->
@@ -381,20 +439,47 @@ const gridStyle = computed(() => {
             <NInput v-model:value="gpuIdStr" :placeholder="t('settings.auto')" class="glass-input-sm" />
           </div>
 
-          <!-- Output -->
+          <!-- Language -->
           <div class="setting-item full-width">
-            <label>{{ t('settings.outputFolder') }}</label>
-            <div class="folder-input">
-              <NInput v-model:value="outputFolder" readonly class="glass-input-sm" />
-              <NButton class="glass-button-sm" @click="selectOutputFolder">
-                <template #icon>
-                  <NIcon><FolderOpenOutline /></NIcon>
-                </template>
-              </NButton>
-            </div>
+            <label>{{ t('settings.language') }}</label>
+            <NSelect v-model:value="locale" :options="languageOptions" class="glass-select" />
           </div>
         </div>
       </div>
+    </NModal>
+
+    <!-- Model Download Modal (Non-closable) -->
+    <NModal
+      :show="Object.values(isDownloadingModel).some(Boolean)"
+      :mask-closable="false"
+      :close-on-esc="false"
+      transform-origin="center"
+    >
+      <NCard
+        class="glass-modal"
+        style="width: 400px;"
+        :title="t('common.downloading')"
+        :bordered="false"
+        size="huge"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="download-progress">
+          <div class="mb-2 flex justify-between text-xs text-gray-500">
+            <span>{{ t('common.downloadStatus', {
+              file: downloadProgress.file,
+              current: downloadProgress.currentFileIndex,
+              total: downloadProgress.totalFiles,
+            }) }}</span>
+          </div>
+          <NProgress
+            type="line"
+            :percentage="Math.min(100, Math.round(((downloadProgress.currentFileIndex - 1 + (downloadProgress.progress / 100)) / downloadProgress.totalFiles) * 100))"
+            indicator-placement="inside"
+            processing
+          />
+        </div>
+      </NCard>
     </NModal>
   </div>
 </template>
@@ -591,7 +676,7 @@ $radius-sm: 12px;
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 24px;
 }
 
 .full-width {
@@ -648,8 +733,45 @@ $radius-sm: 12px;
 
   /* Target the actual scrollable area in NLog */
   :deep(.n-log-loader) {
-    height: 100% !important;
-    max-height: none !important;
+    border-radius: 3px;
+  }
+}
+
+.zoo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: $radius-sm;
+  background: rgba(255,255,255,0.6);
+  margin-bottom: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+  transition: all 0.2s ease;
+
+  &:last-child { margin-bottom: 0; }
+  &:hover {
+    background: rgba(255,255,255,0.8);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+
+  .zoo-info {
+    flex: 1;
+    .zoo-name {
+      font-weight: 600;
+      font-size: 15px;
+      color: #333;
+      margin-bottom: 2px;
+    }
+    .zoo-desc {
+      font-size: 12px;
+      color: #666;
+      line-height: 1.4;
+    }
+  }
+
+  .zoo-actions {
+    margin-left: 16px;
   }
 }
 </style>

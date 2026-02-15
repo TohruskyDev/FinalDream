@@ -2,6 +2,7 @@ import path from 'node:path'
 import { app } from 'electron'
 
 const ZIMAGE_CORE_PATH = 'FinalDream-core/zimage-ncnn-vulkan'
+const MODELS_DIR = 'models'
 
 /**
  * Get ZImage core path
@@ -16,5 +17,15 @@ export function getCorePath(): string {
   }
 }
 
-// Export a dummy checkPipPackage to satisfy test import if needed, or remove the test.
-// I will remove the test as it's not relevant.
+/**
+ * Get model directory
+ * @returns {string} Path to model directory
+ */
+export function getModelDir(): string {
+  if (process.env.NODE_ENV === 'development') {
+    return path.join(app.getAppPath(), 'resources', MODELS_DIR)
+  }
+  else {
+    return path.join(app.getAppPath(), '..', MODELS_DIR)
+  }
+}
