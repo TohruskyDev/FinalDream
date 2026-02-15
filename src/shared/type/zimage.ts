@@ -1,13 +1,14 @@
 export interface ZImageOptions {
   prompt: string
   negativePrompt?: string
-  output?: string
+  outputFolder: string
   width?: number
   height?: number
   steps?: number | 'auto'
   seed?: number | 'rand'
   model?: string
   gpuId?: number | 'auto'
+  count?: number
 }
 
 export interface ZImageModelDownloadProgress {

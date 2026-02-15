@@ -17,6 +17,7 @@ export const useZImageStore = defineStore(
     const height = ref(1024)
     const steps = ref<number | 'auto'>('auto')
     const seed = ref<number | 'rand'>('rand')
+    const count = ref(1)
     const gpuId = ref<number | 'auto'>('auto')
 
     const availableModels = ref<string[]>([])
@@ -79,13 +80,14 @@ export const useZImageStore = defineStore(
       const options: ZImageOptions = {
         prompt: prompt.value,
         negativePrompt: negativePrompt.value,
-        output: `${outputFolder.value}/out-${Date.now()}.png`,
+        outputFolder: outputFolder.value,
         width: width.value,
         height: height.value,
         steps: steps.value,
         seed: seed.value,
         model: selectedModel.value,
         gpuId: gpuId.value,
+        count: count.value,
       }
 
       // Listeners
@@ -263,6 +265,7 @@ export const useZImageStore = defineStore(
       height,
       steps,
       seed,
+      count,
       gpuId,
       availableModels,
       remoteModels,
@@ -295,6 +298,7 @@ export const useZImageStore = defineStore(
         'height',
         'steps',
         'seed',
+        'count',
         'gpuId',
       ],
     },
