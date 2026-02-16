@@ -42,12 +42,12 @@ export const useZImageStore = defineStore(
       // Future models can be added here
     ])
 
-    const checkModel = async (modelName = 'z-image-turbo'): Promise<boolean> => {
-      console.log(`[Store] Checking model status for: ${modelName}`)
+    const checkModel = async (modelName = 'z-image-turbo', fastCheck = true): Promise<boolean> => {
+      console.log(`[Store] Checking model status for: ${modelName} (Fast: ${fastCheck})`)
 
       try {
         // Pass modelFolder if available
-        const result = await ipcRenderer.invoke(IpcChannelInvoke.CHECK_MODEL_STATUS, modelName, false, modelFolder.value)
+        const result = await ipcRenderer.invoke(IpcChannelInvoke.CHECK_MODEL_STATUS, modelName, fastCheck, modelFolder.value)
         console.log(`[Store] Check result:`, result)
 
         modelStatus.value[modelName] = result

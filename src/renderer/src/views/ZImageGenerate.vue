@@ -60,10 +60,32 @@ const galleryRef = ref<HTMLElement | null>(null)
 const containerWidth = ref(1200) // Default start width
 let resizeObserver: ResizeObserver | null = null
 
+// Validation
+const canGenerate = computed(() => {
+  if (isGenerating.value)
+    return true // Allow stopping
+  return !!modelFolder.value && !!outputFolder.value
+})
+
+const validationMessage = computed(() => {
+  if (!modelFolder.value)
+    return t('validation.modelFolderRequired')
+  if (!outputFolder.value)
+    return t('validation.outputFolderRequired')
+  return ''
+})
+
 // Lifecycle
 onMounted(async () => {
   await fetchModels()
   checkAllModels() // Check all zoo models status
+
+  // Initial validation check to guide user
+  if (validationMessage.value) {
+    message.warning(validationMessage.value, { duration: 5000 })
+    // Optional: Auto-open settings if critical config missing?
+    // showSettings.value = true
+  }
 
   // If we have a selected model, check it specifically (in case it's local custom)
   if (selectedModel.value && !availableModels.value.includes(selectedModel.value)) {
@@ -117,20 +139,6 @@ watch(logs, () => {
 })
 
 // Actions
-// Validation
-const canGenerate = computed(() => {
-  if (isGenerating.value)
-    return true // Allow stopping
-  return !!modelFolder.value && !!outputFolder.value
-})
-
-const validationMessage = computed(() => {
-  if (!modelFolder.value)
-    return t('validation.modelFolderRequired')
-  if (!outputFolder.value)
-    return t('validation.outputFolderRequired')
-  return ''
-})
 
 function handleGenerate(): void {
   if (!prompt.value)
@@ -503,8 +511,8 @@ const gridStyle = computed(() => {
       transform-origin="center"
     >
       <NCard
-        class="glass-panel"
-        style="width: 400px;"
+        class="ios-glass-dark"
+        style="width: 400px; --n-color: transparent;"
         :title="t('common.downloading')"
         :bordered="false"
         size="huge"
@@ -797,13 +805,13 @@ const gridStyle = computed(() => {
     align-items: center;
     margin-bottom: 8px;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.9);
+    color: #333;
   }
 
   .download-size {
     font-variant-numeric: tabular-nums;
     font-weight: 600;
-    color: white;
+    color: #000;
   }
 }
 </style>
